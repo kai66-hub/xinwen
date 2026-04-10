@@ -2,42 +2,43 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from toutiao_backend.config import db_conf
-from toutiao_backend.crud import news
+from toutiao_backend.crud import news, news_cache
 
 router = APIRouter(prefix="/api/news", tags=["news"])
 
 @router.get("/categories")
-async def get_categories(skip: int = 0, limit: int = 100, db:AsyncSession = Depends(db_conf.get_database)):
-	# 先获取数据库里面新闻分类数据 -> 先定义模型类 -> 封装查询数据的方法
-	categories = await news.get_categories(db, skip, limit)
-	return {
-	    "code": 200,
-	    "message": "获取新闻分类成功",
-	        "data": categories
-        }
+
+async def get_categories(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(db_conf.get_database)):
+    # 先获取数据库里面新闻分类数据 → 先定义模型类 → 封装查询数据的方法
+    categories = await news_cache.get_categories(db, skip, limit)
+    return {
+        "code": 200,
+        "message": "获取新闻分类成功",
+        "data": categories
+    }
 
 @router.get("/list")
 async def get_news_list(
         category_id: int = Query(..., alias="categoryId"),
         page: int = 1,
         page_size: int = Query(10, alias="pageSize", le=100),
-        db: AsyncSession = Depends(db_conf.get_database),
+        db: AsyncSession = Depends(db_conf.get_database)
 ):
-	# 思路：处理分页规则 → 查询新闻列表 → 计算总量 → 计算是否还有更多
-	offset = (page - 1) * page_size
-	news_list = await news.get_news_list(db, category_id, offset, page_size)
-	total = await news.get_news_count(db, category_id)
-	# (跳过的 + 当前列表里面的数量) < 总量
-	has_more = (offset + len(news_list)) < total
-	return {
-		"code": 200,
-		"message": "获取新闻列表成功",
-		"data": {
-			"list": news_list,
-			"total": total,
-			"hasMore": has_more
-		}
-	}
+    # 思路：处理分页规则 → 查询新闻列表 → 计算总量 → 计算是否还有更多
+    offset = (page - 1) * page_size
+    news_list = await news_cache.get_news_list(db, category_id, offset, page_size)
+    total = await news.get_news_count(db, category_id)
+    # (跳过的 + 当前列表里面的数量) &lt; 总量
+    has_more = (offset + len(news_list)) < total
+    return {
+        "code": 200,
+        "message": "获取新闻列表成功",
+        "data": {
+            "list": news_list,
+            "total": total,
+            "hasMore": has_more
+        }
+    }
 
 
 @router.get("/detail")
